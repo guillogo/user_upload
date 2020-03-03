@@ -3,7 +3,8 @@
 	//[1]. Get and parse parameters
 	function print_menu()
 	{
-		echo "Script usage:\n\n";
+		echo "Script Command Line Directives:\n";
+		echo "--------------------\n";
 		echo "--file [csv file name] : the name of the CSV to be parsed\n";
 		echo "--create_table : this will cause the MySQL users table to be built (and no further action will be taken)\n";
 		echo "--dry_run : this will be used with the --file directive in case we want to run the script but not insert into the DB. All other functions will be executed, but the database won't be altered\n";
@@ -81,14 +82,33 @@
 			$host = $argv[$pos + 1];
 		}
 	}
+	
+	// Validate required parameters
+	if ($file=="" || $username=="" || $host=="" ){
+		echo "\n";
+		echo "The parameters File, Username and Host are required. Please try again.\n\n";
+		print_menu();
+		die();		
+	}
+	
+	// Select --create_table or --dry_run not both
+	if ($createtable && $dryrun){
+		echo "\n";
+		echo "Select --create_table or --dry_run not both. Please try again.\n\n";
+		print_menu();
+		die();		
+	}	
 
 	// Print the selected options
+	echo "\n";
+	echo "Selected options:\n";
+	echo "--------------------\n";
 	echo "File: $file\n";
 	echo "Create table: $createtable\n";
 	echo "Dry run: $dryrun\n";
 	echo "Username: $username\n";
 	echo "Password: $password\n";
-	echo "Host: $host\n";
+	echo "Host: $host\n\n";
 	// Database parameter is missing, assuming username as such? or create a new?
 	$dbname = "dbguillermo";
 
@@ -112,6 +132,15 @@
 			echo "Error. Error creating database: " . $conn->error . "\n";
 		}
 		
+		// truncate table users
+		$sql = "TRUNCATE TABLE users;";
+		
+		if ($conn->query($sql) === TRUE) {
+			echo "Table users deleted successfully\n";
+		} else {
+			echo "Error deleting table: " . $conn->error . "\n";
+		}		
+		
 		// Create table users
 		$sql = "CREATE TABLE if not exists users (
 				name VARCHAR(255) NOT NULL,
@@ -129,16 +158,19 @@
 		$sql = "CREATE UNIQUE INDEX index_email ON users(email);";
 		
 		if ($conn->query($sql) === TRUE) {
-			echo "Index created successfully\n";
+			echo "Index created successfully\n\n";
 		} else {
-			echo "Error creating index: " . $conn->error . "\n";
+			echo "Error creating index: " . $conn->error . "\n\n";
 		}
 		
 		return $conn;
 		
 	}
 	
+	// If create_table is true, connect to database, create the table and exit.
 	if ($createtable){
+		echo "Database information\n";
+		echo "--------------------\n";
 		$conn = connection($host, $username, $password, $dbname);
 	}
 	
@@ -148,6 +180,8 @@
 	if ($fh = fopen($file, 'r')) {
 		$firstrow = fgets($fh);
 		if ($dryrun){
+			echo "File records\n";
+			echo "--------------------\n";			
 			echo $firstrow;
 		}
 		while (!feof($fh)) {
@@ -155,19 +189,25 @@
 			$line   = fgets($fh);			
 			// Parse $line and split in columns
 			$output = explode(",", $line);
-			
+			if (!isset($output[1])) {
+			   $output[1] = null;
+			}
+			if (!isset($output[2])) {
+			   $output[2] = null;
+			}
 			// Capitalise name and surname and Lowercase email
-			$name = ucfirst(trim($output[0]));
-			$surname = ucfirst(trim($output[1]));
+			$name = ucfirst(strtolower(trim($output[0])));
+			$surname = ucfirst(strtolower(trim($output[1])));
 			$email = strtolower(trim($output[2]));
+			// Remove all illegal characters from email
+			$email = filter_var($email, FILTER_SANITIZE_EMAIL);
 			
 			//[4]. Insert into database
 			// If dry_run is true, read and parse data from csv but not insert to database
 			if ($dryrun){
 				echo $name .", ". $surname .", ". $email . "\n";;
-			}
+			}			
 			
-			// If create_table is true, connect to database, create the table and exit.
 			if ($createtable){
 				//Validate email format: if (filter_var($email, FILTER_VALIDATE_EMAIL))
 				if (filter_var($email, FILTER_VALIDATE_EMAIL)){			
@@ -179,7 +219,7 @@
 						// Bind variables to the prepared statement as parameters
 						$stmt ->bind_param("sss", $first_name, $last_name, $email);
 
-						//Set the parameters values and execute the statement
+						//Set the parameters values and execute the statement						
 						$first_name = $name;
 						$last_name = $surname;
 						$email = $email;
@@ -195,8 +235,10 @@
 				}				
 			}				
 		}
-		echo "Records inserted successfully: ".$insert. "\n";
-		echo "Records inserted not successfully: ".$notinsert. "\n";
+		if ($createtable){
+			echo "Records inserted successfully: ".$insert. "\n";
+			echo "Records not inserted : ".$notinsert. "\n";
+		}
 		fclose($fh);
 	} else {
 		die("Invalid file specification\n");
