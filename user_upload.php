@@ -1,6 +1,6 @@
 <?php
 
-  //Get and parse parameters
+  //[1]. Get and parse parameters
   function print_menu() {
     echo "Script usage:\n\n";
     echo "--file [csv file name] : the name of the CSV to be parsed\n";
@@ -87,5 +87,59 @@
   echo "Username: $username\n";
   echo "Password: $password\n";
   echo "Host: $host\n";
+  // Database parameter is missing, assuming username as such? or create a new?
+  $dbname = "dbguillermo";
+  
+  //[2]. Creating a connection to the database
+  function connection($host, $username, $password, $dbname){
+		$conn = new mysqli($host, $username, $password);
+		// Check connection
+		if ($conn->connect_error) {
+		  die("Error. Connection failed: " . $conn->connect_error."\n");
+		} 
 
+		// Creating a database
+		$sql = "CREATE DATABASE IF NOT EXISTS ".$dbname." DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
+		if ($conn->query($sql) === TRUE) {
+		  echo "Database created successfully\n";
+		  // Use database
+		  $sql = "use ".$dbname.";";
+		  $conn->query($sql);		  
+		} else {
+			echo "Error. Error creating database: " . $conn->error."\n";
+		}
+		
+		// Create table users
+		$sql = "CREATE TABLE if not exists users (
+			name VARCHAR(255) NOT NULL,
+			surname VARCHAR(255) NOT NULL,
+			email VARCHAR(255) NOT NULL
+			)";
+
+		if ($conn->query($sql) === TRUE) {
+			echo "Table users created successfully\n";
+		} else {
+			echo "Error creating table: " . $conn->error."\n";
+		}
+		
+		// Create unique index to email
+		$sql = "CREATE UNIQUE INDEX index_email ON users(email);";
+
+		if ($conn->query($sql) === TRUE) {
+			echo "Index created successfully\n";
+		} else {
+			echo "Error creating index: " . $conn->error."\n";
+		}	
+	  
+  }
+  
+  // If create table was selected, create the connection
+  if ($createtable){
+	  connection($host, $username, $password, $dbname);
+  }
+  
+  
+  
+  
+  
  ?>
