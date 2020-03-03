@@ -20,6 +20,7 @@
 	$username    = "";
 	$password    = "";
 	$host        = "";
+	$conn 		 = "";
 
 	// Let's check if $argv variable is populated.
 	if (count($argv) == 0) {
@@ -137,30 +138,73 @@
 		
 	}
 	
-	// If create table was selected, create the connection
 	if ($createtable){
-		connection($host, $username, $password, $dbname);
-	}	
-
+		$conn = connection($host, $username, $password, $dbname);
+	}
+	
 	//[3]. Read data from CSV
+	$insert = 0;
+	$notinsert = 0;
 	if ($fh = fopen($file, 'r')) {
+		$firstrow = fgets($fh);
+		if ($dryrun){
+			echo $firstrow;
+		}
 		while (!feof($fh)) {
 			// Reading CSV data line by line
-			// Assuming no header, comma separated values
-			$line = fgets($fh);
-			// To do: Parse $line and split in columns
-			// To do: Capitalise data: ucfirst
-			// To do: Lowercase email: strtolower
-			// To do: Validate email format: if (filter_var($email, FILTER_VALIDATE_EMAIL))
-			// To do: Insert into database
-			echo $line;
+			$line   = fgets($fh);			
+			// Parse $line and split in columns
+			$output = explode(",", $line);
+			
+			// Capitalise name and surname and Lowercase email
+			$name = ucfirst(trim($output[0]));
+			$surname = ucfirst(trim($output[1]));
+			$email = strtolower(trim($output[2]));
+			
+			//[4]. Insert into database
+			// If dry_run is true, read and parse data from csv but not insert to database
+			if ($dryrun){
+				echo $name .", ". $surname .", ". $email . "\n";;
+			}
+			
+			// If create_table is true, connect to database, create the table and exit.
+			if ($createtable){
+				//Validate email format: if (filter_var($email, FILTER_VALIDATE_EMAIL))
+				if (filter_var($email, FILTER_VALIDATE_EMAIL)){			
+				
+					// insert users
+					$sql = "INSERT INTO users (name, surname, email) VALUES (?, ?, ?)";
+
+					if($stmt  = $conn->prepare($sql)){
+						// Bind variables to the prepared statement as parameters
+						$stmt ->bind_param("sss", $first_name, $last_name, $email);
+
+						//Set the parameters values and execute the statement
+						$first_name = $name;
+						$last_name = $surname;
+						$email = $email;
+						$stmt ->execute();
+						$insert++;
+						//echo "Records inserted successfully - ".$name .", ". $surname .", ". $email . "\n";
+					} else{
+						echo "ERROR: Could not prepare query: $sql. " . $mysqli->error . "\n";
+					}
+				} else {
+					$notinsert++;
+					echo "Invalid email. Record not inserted - ".$name .", ". $surname .", ". $email . "\n";
+				}				
+			}				
 		}
+		echo "Records inserted successfully: ".$insert. "\n";
+		echo "Records inserted not successfully: ".$notinsert. "\n";
 		fclose($fh);
 	} else {
 		die("Invalid file specification\n");
 	}
 
-
+	if ($createtable){
+		$conn->close();
+	}
 
 
 ?>
