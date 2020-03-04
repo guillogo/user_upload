@@ -24,9 +24,16 @@ The PHP script should include these command line options (directives):
 - -p – MySQL password
 - -h – MySQL host
 - --help – which will output the above list of directives with details.
+
 For example:
+
+1. Create the table users
 ```
 php user_upload.php  --file users.csv --create_table -u root -p pass -h localhost
+```
+2. Upload users into table
+```
+php user_upload.php  --file users.csv -u root -p pass -h localhost
 ```
 ```php
 // The parameters File, Username and Host are required.
