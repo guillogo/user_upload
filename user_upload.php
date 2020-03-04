@@ -21,7 +21,7 @@
 	$username    = "";
 	$password    = "";
 	$host        = "";
-	$conn 		 = "";
+	$conn        = "";
 
 	// Let's check if $argv variable is populated.
 	if (count($argv) == 0) {
@@ -84,9 +84,16 @@
 	}
 	
 	// Validate required parameters
-	if ($file=="" || $username=="" || $host=="" ){
+	if (!$createtable && $file=="") {
 		echo "\n";
-		echo "The parameters File, Username and Host are required. Please try again.\n\n";
+		echo "The parameter File is required. Please try again.\n";
+		print_menu();
+		die();		
+	}
+
+	if (!$dryrun && ($username=="" || $host=="")){
+		echo "\n";
+		echo "The parameters Username and Host are required. Please try again.\n";
 		print_menu();
 		die();		
 	}
@@ -94,7 +101,7 @@
 	// Select --create_table or --dry_run not both
 	if ($createtable && $dryrun){
 		echo "\n";
-		echo "Select --create_table or --dry_run not both. Please try again.\n\n";
+		echo "Select --create_table or --dry_run, not both. Please try again.\n";
 		print_menu();
 		die();		
 	}	
@@ -115,37 +122,18 @@
 	//[2]. Creating a connection to the database
 	function connection($host, $username, $password, $dbname)
 	{
-		$conn = new mysqli($host, $username, $password);
+		$conn = mysqli_connect($host, $username, $password, $dbname);
 		// Check connection
-		if ($conn->connect_error) {
-			die("Error. Connection failed: " . $conn->connect_error . "\n");
-		}
-		
-		// Creating a database
-		$sql = "CREATE DATABASE IF NOT EXISTS " . $dbname . " DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
-		if ($conn->query($sql) === TRUE) {
-			echo "Database created successfully\n";
-			// Use database
-			$sql = "use " . $dbname . ";";
-			$conn->query($sql);
-		} else {
-			echo "Error. Error creating database: " . $conn->error . "\n";
-		}
-		
-		// truncate table users
-		$sql = "TRUNCATE TABLE users;";
-		
-		if ($conn->query($sql) === TRUE) {
-			echo "Table users deleted successfully\n";
-		} else {
-			echo "Error deleting table: " . $conn->error . "\n";
-		}		
-		
+		if (!$conn) {
+			die("Error. Connection failed: ". mysqli_connect_errno() . "\n");
+		}	
+
 		// Create table users
 		$sql = "CREATE TABLE if not exists users (
-				name VARCHAR(255) NOT NULL,
-				surname VARCHAR(255) NOT NULL,
-				email VARCHAR(255) NOT NULL
+				name VARCHAR(255),
+				surname VARCHAR(255),
+				email VARCHAR(255) NOT NULL,
+				UNIQUE KEY(email)
 				)";
 		
 		if ($conn->query($sql) === TRUE) {
@@ -153,26 +141,28 @@
 		} else {
 			echo "Error creating table: " . $conn->error . "\n";
 		}
-		
-		// Create unique index to email
-		$sql = "CREATE UNIQUE INDEX index_email ON users(email);";
+		// truncate table users
+		$sql = "TRUNCATE TABLE users";
 		
 		if ($conn->query($sql) === TRUE) {
-			echo "Index created successfully\n\n";
 		} else {
-			echo "Error creating index: " . $conn->error . "\n\n";
+			echo "Error deleting table: " . $conn->error . "\n";
 		}
 		
 		return $conn;
 		
 	}
-	
-	// If create_table is true, connect to database, create the table and exit.
-	if ($createtable){
+
+	if(!$dryrun) {
+		// If create the connection to database	
 		echo "Database information\n";
 		echo "--------------------\n";
 		$conn = connection($host, $username, $password, $dbname);
+		if($createtable) {
+			exit();
+		}
 	}
+	
 	
 	//[3]. Read data from CSV
 	$insert = 0;
@@ -182,8 +172,8 @@
 		if ($dryrun){
 			echo "File records\n";
 			echo "--------------------\n";			
-			echo $firstrow;
 		}
+		// Discard the first line - headers
 		while (!feof($fh)) {
 			// Reading CSV data line by line
 			$line   = fgets($fh);			
@@ -195,47 +185,40 @@
 			if (!isset($output[2])) {
 			   $output[2] = null;
 			}
-			// Capitalise name and surname and Lowercase email
+			//Make name and surname first character uppercase
+			//Lowercase and remove all illegal characters from email
 			$name = ucfirst(strtolower(trim($output[0])));
 			$surname = ucfirst(strtolower(trim($output[1])));
 			$email = strtolower(trim($output[2]));
-			// Remove all illegal characters from email
-			$email = filter_var($email, FILTER_SANITIZE_EMAIL);
+
+			if(!($name == "" && $surname == "" && $email == "")) {
 			
-			//[4]. Insert into database
-			// If dry_run is true, read and parse data from csv but not insert to database
-			if ($dryrun){
-				echo $name .", ". $surname .", ". $email . "\n";;
-			}			
-			
-			if ($createtable){
-				//Validate email format: if (filter_var($email, FILTER_VALIDATE_EMAIL))
+				//[4]. Insert into database
+				// If dry_run is true, read and parse data from csv but not insert to database
+				// If create_table is true, connect to database, create the table and exit.
+				// Validate email format
 				if (filter_var($email, FILTER_VALIDATE_EMAIL)){			
-				
-					// insert users
-					$sql = "INSERT INTO users (name, surname, email) VALUES (?, ?, ?)";
+					if (!$dryrun){
+						$sql = "INSERT INTO users (name, surname, email) VALUES (?, ?, ?)";
 
-					if($stmt  = $conn->prepare($sql)){
-						// Bind variables to the prepared statement as parameters
-						$stmt ->bind_param("sss", $first_name, $last_name, $email);
-
-						//Set the parameters values and execute the statement						
-						$first_name = $name;
-						$last_name = $surname;
-						$email = $email;
-						$stmt ->execute();
-						$insert++;
-						//echo "Records inserted successfully - ".$name .", ". $surname .", ". $email . "\n";
-					} else{
-						echo "ERROR: Could not prepare query: $sql. " . $mysqli->error . "\n";
+						if($stmt  = $conn->prepare($sql)){
+							// Bind variables to the prepared statement as parameters
+							$stmt ->bind_param("sss", $name, $surname, $email);
+							$stmt ->execute();
+							$insert++;
+						} else{
+							echo "ERROR: Could not prepare query: $sql. " . $mysqli->error . "\n";
+						}
+					} else {
+						echo $name .", ". $surname .", ". $email . "\n";;
 					}
 				} else {
 					$notinsert++;
-					echo "Invalid email. Record not inserted - ".$name .", ". $surname .", ". $email . "\n";
+					echo "ERROR: Invalid email. Record ignored: ".$name .", ". $surname .", ". $email . "\n";
 				}				
-			}				
+			}
 		}
-		if ($createtable){
+		if(!$dryrun) {
 			echo "Records inserted successfully: ".$insert. "\n";
 			echo "Records not inserted : ".$notinsert. "\n";
 		}
